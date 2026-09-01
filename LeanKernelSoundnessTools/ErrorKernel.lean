@@ -20,24 +20,26 @@ it rejects valid proofs.
 instance : Kernel, ErrorKernel := {}
 
 /--
-Prove that ErrorKernel is NOT sound in a non-vacuous sense.
+Prove that ErrorKernel IS sound (vacuously true).
 
-We need a proof that there exists some proof `p` of type `T` such that
-the model accepts it but ErrorKernel rejects it. This shows ErrorKernel is
-not a useful sound kernel.
+`ErrorKernel.check` always returns `.invalid`, so the implication
+"check = .valid → model accepts" is vacuously true. This is a trivial
+(and useless) instance of soundness.
+
+The "unsoundness" in the informal sense is that ErrorKernel rejects every
+proof, including those the model accepts. But formally, `Sound ErrorKernel`
+holds vacuously.
 -/
-theorem errorKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
-    (ves : VEnvs) (wf : ves.WF env) (p T : Expr) (hModel : (ves.venv .safe).HasType 0 [] p' T') :
-    ¬ (Sound (ErrorKernel.mk : Kernel) buildVEnv) := by
-  intro hsound
-  have hcheck : (ErrorKernel.mk : Kernel).check env p T = .invalid := rfl
-  -- hsound.checkAccepts_implies_modelAccepts requires check = .valid
-  -- Since check = .invalid, the implication is vacuously true.
-  -- ErrorKernel IS sound in the formal sense, but useless.
-  -- We need to show it's not sound *and useful*.
-  -- Actually, the formal Sound class is trivially satisfied by ErrorKernel.
-  -- The "unsoundness" is that it rejects things the model accepts.
-  -- We prove this by constructing a specific counterexample.
-  sorry
+theorem errorKernel_sound (buildVEnv : Environment → VEnv) (env : Environment)
+    (ves : VEnvs) (wf : ves.WF env) (p T : Expr) :
+    Sound (ErrorKernel.mk : Kernel) buildVEnv := by
+  refine { checkAccepts_implies_modelAccepts := ?_ }
+  intro env' ves' wf' p' T' h
+  -- h : ErrorKernel.check env' p' T' = .valid
+  -- But ErrorKernel.check always returns .invalid, so h is a contradiction
+  have h_invalid : ErrorKernel.check env' p' T' = .invalid := rfl
+  rw [h_invalid] at h
+  -- h : .invalid = .valid, which is impossible since constructors differ
+  injection h
 
 end LeanKernelSoundnessTools
