@@ -1,0 +1,13 @@
+name = "lean-kernel-soundness-tools"
+defaultTargets = ["LeanKernelSoundnessTools"]
+
+[[require]]
+name = "lean4lean"
+path = "/Users/jasonrute/Development/leanstral/prove_lean_correct/lean4lean"
+
+[[require]]
+name = "lean4lean-model"
+path = "/Users/jasonrute/Development/leanstral/prove_lean_correct/lean4lean-model"
+
+[[lean_lib]]
+name = "LeanKernelSoundnessTools"
