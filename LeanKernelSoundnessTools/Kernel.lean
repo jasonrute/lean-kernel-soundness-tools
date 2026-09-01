@@ -11,18 +11,23 @@ We also define two concrete implementations:
 - `Lean4LeanKernel`: wraps the actual Lean4Lean kernel
 -/
 
-import LeanKernelSoundnessTools.Soundness
+import Lean4Lean.Verify.Environment
+import Lean4Lean.Verify.TypeChecker
+import Lean4LeanModel.StandardAxioms
+import Lean4LeanModel.ModelConstruction
 
 namespace LeanKernelSoundnessTools
 
 open Lean4Lean
+open Lean hiding Environment Exception
+open Kernel
 
 /-! ## Kernel result type -/
 
 /--
 The result of a kernel check.
 -/
-inductive KernelResult
+inductive KernelResult : Type
   | valid
   | invalid
   | error (msg : String)
@@ -59,13 +64,20 @@ class Kernel where
 /--
 A kernel that always rejects every input.
 -/
-class ErrorKernel : Kernel where
+class ErrorKernel extends Kernel where
   check := fun _ _ _ => .invalid
 
 /--
 A kernel that always accepts every input.
 -/
-class AcceptKernel : Kernel where
+class AcceptKernel extends Kernel where
+  check := fun _ _ _ => .valid
+
+-- Provide Kernel instances so ErrorKernel/AcceptKernel can be used as Kernel
+instance : Kernel where
+  check := fun _ _ _ => .invalid
+
+instance : Kernel where
   check := fun _ _ _ => .valid
 
 /-! ## Soundness property -/
@@ -84,7 +96,7 @@ class Sound (k : Kernel) (buildVEnv : Environment → VEnv) : Prop where
   checkAccepts_implies_modelAccepts {env : Environment} {ves : VEnvs} (wf : ves.WF env)
     {p T : Expr} (h : k.check env p T = .valid) :
     ∃ (ves' : VEnvs), ves'.WF env ∧
-      ∃ (p' T' : VExpr), Lean4Lean.TrExprS (ves.venv .safe) [] [] p p' ∧ Lean4Lean.TrExprS (ves.venv .safe) [] [] T T'
+      ∃ (p' T' : VExpr), TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T'
 
 /-! ## Consistency property -/
 
@@ -95,7 +107,7 @@ class Consistent (k : Kernel) : Prop where
   /--
   Consistency: the kernel never accepts `False`.
   -/
-  not_proves_false {env : Environment} {p : Expr} (h : k.check env p (Lean.Expr.const ``False []) = .valid) : False
+  not_proves_false {env : Environment} {p : Expr} (h : k.check env p (Expr.const ``False []) = .valid) : False
 
 /-! ## Dummy kernel proofs -/
 
@@ -112,8 +124,8 @@ is not *complete* (too strict).
 theorem errorKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) (p T : Expr) (p' T' : VExpr)
     (hModel : (ves.venv .safe).HasType 0 [] p' T') :
-    (ErrorKernel.mk : Kernel).check env p T = .invalid := by
-  rfl
+    (ErrorKernel.mk).toKernel.check env p T = .invalid := by
+  simp [ErrorKernel.mk]
 
 /--
 An unsound kernel: `AcceptKernel` accepts every input, so it is not sound.
@@ -124,11 +136,11 @@ everything. Thus soundness would require translations that don't exist.
 -/
 theorem acceptKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) :
-    ¬ (Sound (AcceptKernel.mk : Kernel) buildVEnv) := by
+    ¬ (Sound (AcceptKernel.mk).toKernel buildVEnv) := by
   intro hsound
   -- AcceptKernel accepts everything, including an expression with an mvar
   -- that has no Lean4Lean.TrExprS translation
-  have hcheck : (AcceptKernel.mk : Kernel).check env (.mvar (MVarId.mk `test 0)) (Lean.Expr.const ``False []) = .valid := rfl
+  have hcheck : (AcceptKernel.mk).toKernel.check env (Lean.Expr.mvar (MVarId.mk ``test)) (Expr.const ``False []) = .valid := rfl
   have hmodel := hsound.checkAccepts_implies_modelAccepts wf hcheck
   rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr⟩
   -- hp_tr : Lean4Lean.TrExprS (ves.venv .safe) [] [] (.mvar (MVarId.mk `test 0)) p'
@@ -157,14 +169,14 @@ theorem sound_implies_consistent (k : Kernel) (buildVEnv : Environment → VEnv)
     (henv : (ves.venv .safe).WF)
     (haxioms : AxiomsSatisfy IsStandardAxiom (Classical.choose henv))
     (p : Expr) :
-    k.check env p (Lean.Expr.const ``False []) ≠ .valid := by
+    k.check env p (Expr.const ``False []) ≠ .valid := by
   intro h
   -- By soundness, model accepts the proof of False
   have hmodel := hSound.checkAccepts_implies_modelAccepts wf h
   rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr⟩
-  -- hT_tr : Lean4Lean.TrExprS (ves.venv .safe) [] [] (Lean.Expr.const ``False []) T'
-  -- From the const case of Lean4Lean.TrExprS, T' = Lean.Expr.const ``False us' for some us'
-  -- Since False has 0 universe parameters, us' = [] and T' = Lean.Expr.const ``False []
+  -- hT_tr : TrExprS (ves.venv .safe) [] [] (Expr.const ``False []) T'
+  -- From the const case of TrExprS, T' = Expr.const ``False us' for some us'
+  -- Since False has 0 universe parameters, us' = [] and T' = Expr.const ``False []
   --
   -- Now we need to derive a contradiction using model_consistent.
   -- model_consistent says: ¬ ∃ e, (ves'.venv .safe).HasType 0 [] e VExpr.false
