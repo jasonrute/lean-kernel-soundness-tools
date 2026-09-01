@@ -22,29 +22,26 @@ instance : Kernel, AcceptKernel := {}
 /--
 Prove that AcceptKernel is NOT sound.
 
-AcceptKernel accepts everything, including a proof of False.
-By the soundness property, this would imply the model also accepts
-a proof of False, contradicting the model's consistency.
+`Sound AcceptKernel` would require that for every `(p, T)`, the translation
+`TrExprS` holds. But `TrExprS` fails for bound variables in an empty context
+(e.g., `.bvar 0`). We use this as a counterexample.
 -/
 theorem acceptKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
-    (ves : VEnvs) (wf : ves.WF env)
-    (hconsistent : ¬ ∃ (e : VExpr), (ves.venv .safe).HasType 0 [] e VExpr.false) :
+    (ves : VEnvs) (wf : ves.WF env) :
     ¬ (Sound (AcceptKernel.mk : Kernel) buildVEnv) := by
   intro hsound
-  -- AcceptKernel accepts everything. In particular, it accepts a proof p
-  -- of False (assuming one exists in the environment).
-  -- But we need a specific p. We can't construct one without knowing the environment.
-  -- Instead, we use the model consistency assumption: there is NO proof of False.
-  -- This means AcceptKernel cannot be sound because:
-  -- 1. If the environment has any proof of False, AcceptKernel accepts it
-  --    but the model rejects it → unsound
-  -- 2. If the environment has no proof of False, AcceptKernel still "accepts"
-  --    a non-existent proof vacuously, but this doesn't give a contradiction.
-  --
-  -- Actually, the formal definition of Sound requires that for ALL p, T,
-  -- if check = valid then model accepts. Since check is always valid,
-  -- this requires the model to accept EVERYTHING, which contradicts
-  -- hconsistent (model doesn't accept False).
-  sorry
+  -- Pick p = .bvar 0 and T = .sort .zero as a counterexample
+  -- AcceptKernel.check always returns .valid, so soundness applies
+  have hcheck : (AcceptKernel.mk : Kernel).check env (.bvar 0) (.sort .zero) = .valid := rfl
+  have hmodel := hsound.checkAccepts_implies_modelAccepts wf hcheck
+  rcases hmodel with ⟨ves', wf', p', T', hp_tr, hT_tr⟩
+  -- hp_tr : TrExprS (ves.venv .safe) [] [] (.bvar 0) p'
+  -- By the TrExprS.bvar rule, this requires [].find? (.inl 0) = some (e, A)
+  -- But [].find? (.inl 0) = none, contradiction
+  cases hp_tr
+  -- hp_tr is TrExprS.bvar hfind where hfind : [].find? (.inl 0) = some (e, A)
+  -- [].find? (.inl 0) reduces to none, giving none = some (e, A) which is false
+  simp at hfind
+  exact hfind
 
 end LeanKernelSoundnessTools
