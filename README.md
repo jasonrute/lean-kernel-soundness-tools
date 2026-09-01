@@ -36,10 +36,10 @@ Export file
 
 | File | Purpose |
 |------|---------|
-| `LeanKernelSoundnessTools/Kernel.lean` | Abstract `Kernel` typeclass, `Sound`/`Consistent` properties, dummy kernel proofs (ErrorKernel, AcceptKernel) |
+| `LeanKernelSoundnessTools/Kernel.lean` | Abstract `Kernel` typeclass, `Sound`/`Consistent` properties, dummy kernel proofs (FailKernel, ErrorKernel, AcceptKernel) |
 | `LeanKernelSoundnessTools/KernelRunner.lean` | Parser for export files, replay into kernel `Environment` |
 | `LeanKernelSoundnessTools/ExportFormat.md` | Specification for the NDJSON export format with index tables |
-| `LeanKernelSoundnessTools/ErrorKernel.lean` | `ErrorKernel` — rejects all inputs (sound but incomplete) |
+| `LeanKernelSoundnessTools/ErrorKernel.lean` | `FailKernel` — returns `.invalid` (not sound), `ErrorKernel` — returns `.error` (sound) |
 | `LeanKernelSoundnessTools/AcceptKernel.lean` | `AcceptKernel` — accepts all inputs (unsound) |
 | `LeanKernelSoundnessTools/Soundness.lean` | Main theorem: `sound_implies_consistent` (stubbed — one sorry remaining) |
 
