@@ -5,8 +5,9 @@ This file defines the abstract kernel interface and its soundness/consistency
 properties. A kernel is a black-box proof checker: given an environment and a
 proof term, it returns whether the proof is accepted.
 
-We also define two concrete implementations:
-- `ErrorKernel`: rejects every input (used for testing)
+We also define three concrete implementations:
+- `FailKernel`: rejects every input (used for testing)
+- `ErrorKernel`: returns `.error` (used for testing)
 - `AcceptKernel`: accepts every input (used for testing)
 - `Lean4LeanKernel`: wraps the actual Lean4Lean kernel
 -/
@@ -64,8 +65,14 @@ class Kernel where
 /--
 A kernel that always rejects every input.
 -/
-class ErrorKernel extends Kernel where
+class FailKernel extends Kernel where
   check := fun _ _ _ => .invalid
+
+/--
+A kernel that returns an error for every input.
+-/
+class ErrorKernel extends Kernel where
+  check := fun _ _ _ => .error "rejected"
 
 /--
 A kernel that always accepts every input.
@@ -73,12 +80,10 @@ A kernel that always accepts every input.
 class AcceptKernel extends Kernel where
   check := fun _ _ _ => .valid
 
--- Provide Kernel instances so ErrorKernel/AcceptKernel can be used as Kernel
-instance : Kernel where
-  check := fun _ _ _ => .invalid
-
-instance : Kernel where
-  check := fun _ _ _ => .valid
+-- Provide Kernel instances so the dummy kernels can be used as Kernel
+instance : Kernel, FailKernel := {}
+instance : Kernel, ErrorKernel := {}
+instance : Kernel, AcceptKernel := {}
 
 /-! ## Soundness property -/
 
@@ -101,6 +106,16 @@ class Sound (k : Kernel) (buildVEnv : Environment → VEnv) : Prop where
     ∃ (ves' : VEnvs), ves'.WF env ∧
       ∃ (p' T' : VExpr), TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T' ∧
       (ves'.venv .safe).HasType 0 [] p' T'
+  /--
+  Completeness: model acceptance implies kernel does not reject.
+
+  If the verification model accepts `p'` as a proof of `T'`, and the expressions
+  translate, then the kernel check is not `.invalid`.
+  -/
+  modelAccepts_implies_checkNotInvalid {env : Environment} {ves : VEnvs} (wf : ves.WF env)
+    {p T : Expr} {p' T' : VExpr} (hModel : (ves.venv .safe).HasType 0 [] p' T')
+    (hp_tr : TrExprS (ves.venv .safe) [] [] p p') (hT_tr : TrExprS (ves.venv .safe) [] [] T T') :
+    k.check env p T ≠ .invalid
 
 /-! ## Consistency property -/
 
@@ -116,39 +131,41 @@ class Consistent (k : Kernel) : Prop where
 /-! ## Dummy kernel proofs -/
 
 /--
-An unsound kernel: `ErrorKernel` rejects every input, so it is not *complete*.
+`FailKernel` always returns `.invalid`. It is NOT sound because there exist
+proofs that the verification model accepts but that `FailKernel` rejects.
 
-The formal `Sound` class is vacuously true for ErrorKernel (nothing accepted →
-nothing to check). The "unsoundness" is that it rejects valid proofs.
-
-We prove that ErrorKernel always returns `.invalid`, which means it rejects
-every proof — including those the model would accept. This shows the kernel
-is not *complete* (too strict).
+Counterexample: `p = .sort .zero`, `T = .sort (.succ .zero)`.
+The model accepts via `HasType.sort`, but `FailKernel.check` returns `.invalid`.
 -/
-theorem errorKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
-    (ves : VEnvs) (wf : ves.WF env) (p T : Expr) (p' T' : VExpr)
-    (hModel : (ves.venv .safe).HasType 0 [] p' T') :
-    (ErrorKernel.mk).toKernel.check env p T = .invalid := by
-  simp [ErrorKernel.mk]
+theorem failKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
+    (ves : VEnvs) (wf : ves.WF env) :
+    ¬ (Sound (FailKernel.mk : Kernel) buildVEnv) := by
+  intro hsound
+  rcases hsound with ⟨hforward, hbackward⟩
+  have hModel : (ves.venv .safe).HasType 0 [] (.sort .zero) (.sort (.succ .zero)) :=
+    HasType.sort (by trivial)
+  have hp_tr : TrExprS (ves.venv .safe) [] [] (.sort .zero) (.sort .zero) :=
+    TrExprS.sort (by simp)
+  have hT_tr : TrExprS (ves.venv .safe) [] [] (.sort (.succ .zero)) (.sort (.succ .zero)) :=
+    TrExprS.sort (by simp)
+  have hcheck := hbackward hModel hp_tr hT_tr
+  simp [FailKernel.mk] at hcheck
 
 /--
 An unsound kernel: `AcceptKernel` accepts every input, so it is not sound.
 
-The formal `Sound` class is false for AcceptKernel because there exist expressions
-(e.g., `.mvar`) that cannot be translated by `Lean4Lean.TrExprS`, but AcceptKernel accepts
-everything. Thus soundness would require translations that don't exist.
+With the bidirectional Sound class:
+- Forward: `check = .valid → model accepts` — fails because model can't translate `.mvar`
+- Backward: `model accepts → check ≠ .invalid` — holds trivially
 -/
 theorem acceptKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) :
-    ¬ (Sound (AcceptKernel.mk).toKernel buildVEnv) := by
+    ¬ (Sound (AcceptKernel.mk : Kernel) buildVEnv) := by
   intro hsound
-  -- AcceptKernel accepts everything, including an expression with an mvar
-  -- that has no Lean4Lean.TrExprS translation
-  have hcheck : (AcceptKernel.mk).toKernel.check env (Lean.Expr.mvar (MVarId.mk ``test)) (Expr.const ``False []) = .valid := rfl
-  have hmodel := hsound.checkAccepts_implies_modelAccepts wf hcheck
+  rcases hsound with ⟨hforward, hbackward⟩
+  have hcheck : (AcceptKernel.mk : Kernel).check env (Lean.Expr.mvar (MVarId.mk ``test)) (Expr.const ``False []) = .valid := rfl
+  have hmodel := hforward wf hcheck
   rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr, hHasType⟩
-  -- hp_tr : Lean4Lean.TrExprS (ves.venv .safe) [] [] (.mvar (MVarId.mk `test 0)) p'
-  -- Lean4Lean.TrExprS has no rule for .mvar, so this is impossible
   cases hp_tr
 
 end LeanKernelSoundnessTools

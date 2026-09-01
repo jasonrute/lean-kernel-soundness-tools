@@ -1,7 +1,8 @@
 /-
 # Error Kernel
 
-A kernel that rejects every input. Used to test the kernel abstraction.
+Two dummy kernels for testing: `FailKernel` (returns `.invalid`) and
+`ErrorKernel` (returns `.error`).
 -/
 
 import LeanKernelSoundnessTools.Kernel
@@ -11,35 +12,38 @@ open LeanKernelSoundnessTools
 namespace LeanKernelSoundnessTools
 
 /--
-A kernel that always rejects every proof.
+`FailKernel` always returns `.invalid`. It is NOT sound because there exist
+proofs that the verification model accepts but that `FailKernel` rejects.
+
+Counterexample: `p = .sort .zero`, `T = .sort (.succ .zero)`.
+The model accepts via `HasType.sort`, but `FailKernel.check` returns `.invalid`.
 -/
-instance : Kernel, ErrorKernel := {}
+theorem failKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
+    (ves : VEnvs) (wf : ves.WF env) :
+    ¬ (Sound (FailKernel.mk : Kernel) buildVEnv) := by
+  intro hsound
+  rcases hsound with ⟨hforward, hbackward⟩
+  have hModel : (ves.venv .safe).HasType 0 [] (.sort .zero) (.sort (.succ .zero)) :=
+    HasType.sort (by trivial)
+  have hp_tr : TrExprS (ves.venv .safe) [] [] (.sort .zero) (.sort .zero) :=
+    TrExprS.sort (by simp)
+  have hT_tr : TrExprS (ves.venv .safe) [] [] (.sort (.succ .zero)) (.sort (.succ .zero)) :=
+    TrExprS.sort (by simp)
+  have hcheck := hbackward hModel hp_tr hT_tr
+  simp [FailKernel.mk] at hcheck
 
 /--
-Prove that ErrorKernel is not sound.
-
-`Sound ErrorKernel` is vacuously true (nothing accepted → nothing to check),
-but the "unsoundness" is that it rejects proofs the model accepts.
-
-We construct a specific counterexample: `p = .sort .zero` and
-`T = .sort (.succ .zero)`. The model accepts `p` as a proof of `T`
-(by `HasType.sort`), but `ErrorKernel.check` always returns `.invalid`.
+`ErrorKernel` always returns `.error "rejected"`. It IS sound because
+it never returns `.valid`, so the forward direction is vacuously true,
+and it never returns `.invalid`, so the backward direction also holds.
 -/
-theorem errorKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
+theorem errorKernel_sound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) :
-    ∃ (p T : Expr) (ves' : VEnvs) (wf' : ves'.WF env) (p' T' : VExpr),
-    (ves.venv .safe).HasType 0 [] p' T' ∧
-    TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T' ∧
-    ErrorKernel.check env p T = .invalid :=
-by
-  refine ⟨.sort .zero, .sort (.succ .zero), ves, wf, .sort .zero, .sort (.succ .zero), ?_, ?_, ?_, ?_⟩
-  · -- (ves.venv .safe).HasType 0 [] (.sort .zero) (.sort (.succ .zero))
-    exact HasType.sort (by trivial)
-  · -- TrExprS (ves.venv .safe) [] [] (.sort .zero) (.sort .zero)
-    exact TrExprS.sort (by simp)
-  · -- TrExprS (ves.venv .safe) [] [] (.sort (.succ .zero)) (.sort (.succ .zero))
-    exact TrExprS.sort (by simp)
-  · -- ErrorKernel.check env (.sort .zero) (.sort (.succ .zero)) = .invalid
-    rfl
+    Sound (ErrorKernel.mk : Kernel) buildVEnv := by
+  refine ⟨?_, ?_⟩
+  · intro env ves wf h
+    simp [ErrorKernel.mk] at h
+  · intro env ves wf hModel hp_tr hT_tr
+    simp [ErrorKernel.mk]
 
 end LeanKernelSoundnessTools
