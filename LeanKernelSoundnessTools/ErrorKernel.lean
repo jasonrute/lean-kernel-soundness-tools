@@ -12,34 +12,34 @@ namespace LeanKernelSoundnessTools
 
 /--
 A kernel that always rejects every proof.
-
-This kernel is trivially "sound" in the vacuous sense (nothing accepted →
-nothing to check against the model), but it is not *usefully* sound because
-it rejects valid proofs.
 -/
 instance : Kernel, ErrorKernel := {}
 
 /--
-Prove that ErrorKernel IS sound (vacuously true).
+Prove that ErrorKernel is not sound.
 
-`ErrorKernel.check` always returns `.invalid`, so the implication
-"check = .valid → model accepts" is vacuously true. This is a trivial
-(and useless) instance of soundness.
+`Sound ErrorKernel` is vacuously true (nothing accepted → nothing to check),
+but the "unsoundness" is that it rejects proofs the model accepts.
 
-The "unsoundness" in the informal sense is that ErrorKernel rejects every
-proof, including those the model accepts. But formally, `Sound ErrorKernel`
-holds vacuously.
+We construct a specific counterexample: `p = .sort .zero` and
+`T = .sort (.succ .zero)`. The model accepts `p` as a proof of `T`
+(by `HasType.sort`), but `ErrorKernel.check` always returns `.invalid`.
 -/
-theorem errorKernel_sound (buildVEnv : Environment → VEnv) (env : Environment)
-    (ves : VEnvs) (wf : ves.WF env) (p T : Expr) :
-    Sound (ErrorKernel.mk : Kernel) buildVEnv := by
-  refine { checkAccepts_implies_modelAccepts := ?_ }
-  intro env' ves' wf' p' T' h
-  -- h : ErrorKernel.check env' p' T' = .valid
-  -- But ErrorKernel.check always returns .invalid, so h is a contradiction
-  have h_invalid : ErrorKernel.check env' p' T' = .invalid := rfl
-  rw [h_invalid] at h
-  -- h : .invalid = .valid, which is impossible since constructors differ
-  injection h
+theorem errorKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
+    (ves : VEnvs) (wf : ves.WF env) :
+    ∃ (p T : Expr) (ves' : VEnvs) (wf' : ves'.WF env) (p' T' : VExpr),
+    (ves.venv .safe).HasType 0 [] p' T' ∧
+    TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T' ∧
+    ErrorKernel.check env p T = .invalid :=
+by
+  refine ⟨.sort .zero, .sort (.succ .zero), ves, wf, .sort .zero, .sort (.succ .zero), ?_, ?_, ?_, ?_⟩
+  · -- (ves.venv .safe).HasType 0 [] (.sort .zero) (.sort (.succ .zero))
+    exact HasType.sort (by trivial)
+  · -- TrExprS (ves.venv .safe) [] [] (.sort .zero) (.sort .zero)
+    exact TrExprS.sort (by simp)
+  · -- TrExprS (ves.venv .safe) [] [] (.sort (.succ .zero)) (.sort (.succ .zero))
+    exact TrExprS.sort (by simp)
+  · -- ErrorKernel.check env (.sort .zero) (.sort (.succ .zero)) = .invalid
+    rfl
 
 end LeanKernelSoundnessTools
