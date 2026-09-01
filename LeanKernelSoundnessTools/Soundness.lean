@@ -108,16 +108,16 @@ theorem sound_implies_consistent (k : Kernel) (buildVEnv : Environment → VEnv)
   -- STEP 2: Extract cardinal parameters
   rcases hCard with ⟨κ, hκ_mono, hκ_inacc⟩
   --
-  -- STEP 3: Prove T' = VExpr.false
-  -- From hT_tr (const case), since False has 0 universe parameters,
-  -- T' must be VExpr.const ``False []
-  -- But VExpr.false = .forallE (.sort .zero) (.bvar 0) ≠ .const ``False []
-  -- So we cannot directly use hHasType with consistency.
+  -- STEP 3: Bridge from .const ``False [] to VExpr.false
   --
-  -- We need to adjust: either change falseConst to match VExpr.false,
-  -- or prove that HasType at .const ``False [] implies HasType at VExpr.false.
+  -- hHasType : (ves'.venv .safe).HasType 0 [] p' (.const ``False [])
+  -- consistency expects: ¬ ∃ e, env.HasType 0 [] e VExpr.false
   --
-  -- For now, we leave this as a sorry with the correct henv' available.
+  -- We need a bridge lemma: HasType e (.const ``False []) → HasType e VExpr.false
+  -- This requires proving that the kernel's False constant is equivalent to
+  -- the model's false (.forallE (.sort .zero) (.bvar 0)) in the semantic model.
+  --
+  -- This is a non-trivial model-level proof. For now, we leave this as a sorry.
   sorry
 
 end LeanKernelSoundnessTools
