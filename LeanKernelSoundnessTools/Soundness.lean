@@ -15,6 +15,7 @@ Therefore: the kernel never proves `False`.
 
 import LeanKernelSoundnessTools.Kernel
 import LeanKernelSoundnessTools.KernelRunner
+import Lean4Lean.Soundness
 import Lean4LeanModel.Consistency
 import Lean4LeanModel.StandardAxioms
 import Lean4Lean.Replay
@@ -58,13 +59,12 @@ def replay (p : ParsedExport) : Option Environment :=
 
 Given a kernel Environment from replay, construct a verification VEnv
 that is a valid translation.
--/
-def buildVEnv (env : Environment) : VEnv :=
-  LeanKernelSoundnessTools.buildVEnv env
 
-theorem buildVEnv_wf (env : Environment) : (buildVEnv env).WF := by
-  -- TODO: prove that the constructed VEnv is well-formed
-  sorry
+We use the `buildVEnv` from `Lean4Lean.Soundness` which replays declarations
+through the verification layer's `TrEnv`.
+-/
+def buildVEnv (env : Environment) : VEnvs :=
+  Soundness.buildVEnv env
 
 /-! ## Main theorem: sound kernel implies consistency -/
 
@@ -94,16 +94,37 @@ theorem sound_implies_consistent (k : Kernel) (buildVEnv : Environment → VEnv)
   intro h
   -- By soundness, model accepts the proof of False
   have hmodel := hSound.checkAccepts_implies_modelAccepts wf h
-  rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr⟩
-  -- hp_tr : TrExprS (ves.venv .safe) [] [] p p'
+  rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr, hHasType⟩
+  -- hHasType : (ves'.venv .safe).HasType 0 [] p' T'
   -- hT_tr : TrExprS (ves.venv .safe) [] [] (Expr.const ``False []) T'
   --
-  -- From TrExprS, we can derive HasType in the model.
-  -- The key missing link: TrExprS + VEnv.WF → HasType.
-  -- This requires additional theorems connecting Lean4Lean.TrExprS to HasType.
+  -- From hT_tr (const case), T' = VExpr.const ``False []
+  -- (since False has 0 universe parameters)
   --
-  -- For now, we note that the overall soundness theorem depends on completing
-  -- the connection between syntactic translation (Lean4Lean.TrExprS) and typing (HasType).
+  -- Now apply `Lean4LeanModel.Consistency.consistency`:
+  --   consistency hκ hi handler henv haxioms U : ¬ ∃ e, env.HasType U [] e VExpr.false
+  --
+  -- We have hHasType : (ves'.venv .safe).HasType 0 [] p' T'
+  -- And we can prove T' = VExpr.false (since False has 0 universe parameters)
+  -- This contradicts consistency.
+  --
+  -- KEY GAP: VEnvs.WF vs VEnv.WF
+  --
+  -- hwf' : ves'.WF env  is VEnvs.WF from the verification layer
+  -- consistency expects: (ves'.venv .safe).WF  is VEnv.WF from the model
+  --
+  -- These are different types in different layers:
+  --   VEnvs.WF (Lean4Lean.Verify.TypeChecker): relates VEnvs to kernel Environment
+  --   VEnv.WF (Lean4Lean.Theory.Typing.Env): relates VEnv to itself via VDecl list
+  --
+  -- There is no proven lemma connecting ves'.WF env to (ves'.venv .safe).WF.
+  -- The buildVEnvAccum function in Lean4Lean.Soundness constructs a VEnv that
+  -- satisfies both, but the connection hasn't been formalized.
+  --
+  -- This is the "model-model" gap: the verification layer and the semantic model
+  -- use different well-formedness predicates.
+  --
+  -- For now, we leave this as a sorry.
   sorry
 
 end LeanKernelSoundnessTools

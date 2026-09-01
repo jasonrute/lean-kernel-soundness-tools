@@ -92,11 +92,15 @@ model also has `HasType` for the translated proof and type.
 class Sound (k : Kernel) (buildVEnv : Environment → VEnv) : Prop where
   /--
   Soundness: kernel acceptance implies model acceptance.
+
+  If the kernel accepts `p` as a proof of `T`, then the verification model
+  has `HasType` for the translated proof `p'` at the translated type `T'`.
   -/
   checkAccepts_implies_modelAccepts {env : Environment} {ves : VEnvs} (wf : ves.WF env)
     {p T : Expr} (h : k.check env p T = .valid) :
     ∃ (ves' : VEnvs), ves'.WF env ∧
-      ∃ (p' T' : VExpr), TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T'
+      ∃ (p' T' : VExpr), TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T' ∧
+      (ves'.venv .safe).HasType 0 [] p' T'
 
 /-! ## Consistency property -/
 
@@ -142,7 +146,7 @@ theorem acceptKernel_unsound (buildVEnv : Environment → VEnv) (env : Environme
   -- that has no Lean4Lean.TrExprS translation
   have hcheck : (AcceptKernel.mk).toKernel.check env (Lean.Expr.mvar (MVarId.mk ``test)) (Expr.const ``False []) = .valid := rfl
   have hmodel := hsound.checkAccepts_implies_modelAccepts wf hcheck
-  rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr⟩
+  rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr, hHasType⟩
   -- hp_tr : Lean4Lean.TrExprS (ves.venv .safe) [] [] (.mvar (MVarId.mk `test 0)) p'
   -- Lean4Lean.TrExprS has no rule for .mvar, so this is impossible
   cases hp_tr
