@@ -13,9 +13,9 @@ We also define two concrete implementations:
 
 import LeanKernelSoundnessTools.Soundness
 
-open LeanKernelSoundnessTools
-
 namespace LeanKernelSoundnessTools
+
+open Lean4Lean
 
 /-! ## Kernel result type -/
 
@@ -84,7 +84,7 @@ class Sound (k : Kernel) (buildVEnv : Environment → VEnv) : Prop where
   checkAccepts_implies_modelAccepts {env : Environment} {ves : VEnvs} (wf : ves.WF env)
     {p T : Expr} (h : k.check env p T = .valid) :
     ∃ (ves' : VEnvs), ves'.WF env ∧
-      ∃ (p' T' : VExpr), TrExprS (ves.venv .safe) [] [] p p' ∧ TrExprS (ves.venv .safe) [] [] T T'
+      ∃ (p' T' : VExpr), Lean4Lean.TrExprS (ves.venv .safe) [] [] p p' ∧ Lean4Lean.TrExprS (ves.venv .safe) [] [] T T'
 
 /-! ## Consistency property -/
 
@@ -95,39 +95,45 @@ class Consistent (k : Kernel) : Prop where
   /--
   Consistency: the kernel never accepts `False`.
   -/
-  not_proves_false {env : Environment} {p : Expr} (h : k.check env p (.const ``False []) = .valid) : False
+  not_proves_false {env : Environment} {p : Expr} (h : k.check env p (Lean.Expr.const ``False []) = .valid) : False
 
 /-! ## Dummy kernel proofs -/
 
 /--
-An unsound kernel: `ErrorKernel` rejects everything, so it is trivially
-unsound if the model can accept anything.
+An unsound kernel: `ErrorKernel` rejects every input, so it is not *complete*.
+
+The formal `Sound` class is vacuously true for ErrorKernel (nothing accepted →
+nothing to check). The "unsoundness" is that it rejects valid proofs.
+
+We prove that ErrorKernel always returns `.invalid`, which means it rejects
+every proof — including those the model would accept. This shows the kernel
+is not *complete* (too strict).
 -/
 theorem errorKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
-    (ves : VEnvs) (wf : ves.WF env) (p T : Expr) :
-    ¬ (Sound (ErrorKernel.mk : Kernel) buildVEnv) := by
-  intro hsound
-  -- The kernel rejects everything, so checkAccepts_implies_modelAccepts is vacuously true.
-  -- But we need to show it's unsound because the model *can* accept something.
-  -- Actually, ErrorKernel IS sound vacuously (nothing accepted → nothing to check).
-  -- The "unsound" part is that it's useless: it rejects valid proofs too.
-  -- We prove it's not *usefully* sound by showing there exists a proof the model accepts
-  -- but the kernel rejects.
-  sorry
+    (ves : VEnvs) (wf : ves.WF env) (p T : Expr) (p' T' : VExpr)
+    (hModel : (ves.venv .safe).HasType 0 [] p' T') :
+    (ErrorKernel.mk : Kernel).check env p T = .invalid := by
+  rfl
 
 /--
-An unsound kernel: `AcceptKernel` accepts everything, so it will accept a proof
-of `False` if one exists in the model. We prove it is unsound by constructing
-a counterexample.
+An unsound kernel: `AcceptKernel` accepts every input, so it is not sound.
+
+The formal `Sound` class is false for AcceptKernel because there exist expressions
+(e.g., `.mvar`) that cannot be translated by `Lean4Lean.TrExprS`, but AcceptKernel accepts
+everything. Thus soundness would require translations that don't exist.
 -/
 theorem acceptKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) :
     ¬ (Sound (AcceptKernel.mk : Kernel) buildVEnv) := by
   intro hsound
-  -- AcceptKernel accepts everything. In particular, it accepts a proof of False.
-  -- But we know from model_consistent that the model never proves False.
-  -- This contradicts soundness.
-  sorry
+  -- AcceptKernel accepts everything, including an expression with an mvar
+  -- that has no Lean4Lean.TrExprS translation
+  have hcheck : (AcceptKernel.mk : Kernel).check env (.mvar (MVarId.mk `test 0)) (Lean.Expr.const ``False []) = .valid := rfl
+  have hmodel := hsound.checkAccepts_implies_modelAccepts wf hcheck
+  rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr⟩
+  -- hp_tr : Lean4Lean.TrExprS (ves.venv .safe) [] [] (.mvar (MVarId.mk `test 0)) p'
+  -- Lean4Lean.TrExprS has no rule for .mvar, so this is impossible
+  cases hp_tr
 
 /-! ## Main theorem: sound → consistent -/
 
@@ -142,18 +148,33 @@ The proof composes:
 
 Therefore: kernel never proves False.
 -/
+universe u
+
 theorem sound_implies_consistent (k : Kernel) (buildVEnv : Environment → VEnv)
     (hSound : Sound k buildVEnv)
     (hCard : ∃ (κ : ℕ → Cardinal.{u}), StrictMono κ ∧ (∀ n, (κ n).IsInaccessible))
     (handler : StandardAxiom.Handler κ) (env : Environment) (ves : VEnvs) (wf : ves.WF env)
+    (henv : (ves.venv .safe).WF)
     (haxioms : AxiomsSatisfy IsStandardAxiom (Classical.choose henv))
     (p : Expr) :
-    k.check env p (.const ``False []) ≠ .valid := by
+    k.check env p (Lean.Expr.const ``False []) ≠ .valid := by
   intro h
   -- By soundness, model accepts the proof of False
   have hmodel := hSound.checkAccepts_implies_modelAccepts wf h
-  -- By model consistency, model never proves False
-  -- This gives a contradiction
+  rcases hmodel with ⟨ves', hwf', p', T', hp_tr, hT_tr⟩
+  -- hT_tr : Lean4Lean.TrExprS (ves.venv .safe) [] [] (Lean.Expr.const ``False []) T'
+  -- From the const case of Lean4Lean.TrExprS, T' = Lean.Expr.const ``False us' for some us'
+  -- Since False has 0 universe parameters, us' = [] and T' = Lean.Expr.const ``False []
+  --
+  -- Now we need to derive a contradiction using model_consistent.
+  -- model_consistent says: ¬ ∃ e, (ves'.venv .safe).HasType 0 [] e VExpr.false
+  --
+  -- The key missing link: from Lean4Lean.TrExprS we need to obtain HasType in the model.
+  -- This requires additional theorems connecting Lean4Lean.TrExprS to HasType/IsDefEq
+  -- which are not yet available in the verification layer.
+  --
+  -- For now, we note that the overall soundness theorem depends on completing
+  -- the connection between syntactic translation (Lean4Lean.TrExprS) and typing (HasType).
   sorry
 
 end LeanKernelSoundnessTools

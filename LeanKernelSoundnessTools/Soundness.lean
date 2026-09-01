@@ -8,3 +8,7 @@ This library provides tools for reasoning about Lean kernel soundness:
 - Dummy kernels for testing
 - A final composed theorem: sound kernel → consistent
 -/
+
+import Lean4Lean.Verify.Environment
+import Lean4Lean.Verify.Typing.Expr
+import Lean4LeanModel.StandardAxioms
