@@ -98,33 +98,26 @@ theorem sound_implies_consistent (k : Kernel) (buildVEnv : Environment → VEnv)
   -- hHasType : (ves'.venv .safe).HasType 0 [] p' T'
   -- hT_tr : TrExprS (ves.venv .safe) [] [] (Expr.const ``False []) T'
   --
-  -- From hT_tr (const case), T' = VExpr.const ``False []
-  -- (since False has 0 universe parameters)
+  -- STEP 1: Convert VEnvs.WF to VEnv.WF
+  -- hwf' : ves'.WF env is VEnvs.WF (verification layer)
+  -- We need (ves'.venv .safe).WF for consistency (model layer)
+  -- Connection: hwf'.tr .safe : TrEnv .safe env (ves'.venv .safe)
+  -- and TrEnv'.wf : TrEnv → VEnv.WF
+  have henv' : (ves'.venv .safe).WF := TrEnv'.wf (hwf'.tr .safe)
   --
-  -- Now apply `Lean4LeanModel.Consistency.consistency`:
-  --   consistency hκ hi handler henv haxioms U : ¬ ∃ e, env.HasType U [] e VExpr.false
+  -- STEP 2: Extract cardinal parameters
+  rcases hCard with ⟨κ, hκ_mono, hκ_inacc⟩
   --
-  -- We have hHasType : (ves'.venv .safe).HasType 0 [] p' T'
-  -- And we can prove T' = VExpr.false (since False has 0 universe parameters)
-  -- This contradicts consistency.
+  -- STEP 3: Prove T' = VExpr.false
+  -- From hT_tr (const case), since False has 0 universe parameters,
+  -- T' must be VExpr.const ``False []
+  -- But VExpr.false = .forallE (.sort .zero) (.bvar 0) ≠ .const ``False []
+  -- So we cannot directly use hHasType with consistency.
   --
-  -- KEY GAP: VEnvs.WF vs VEnv.WF
+  -- We need to adjust: either change falseConst to match VExpr.false,
+  -- or prove that HasType at .const ``False [] implies HasType at VExpr.false.
   --
-  -- hwf' : ves'.WF env  is VEnvs.WF from the verification layer
-  -- consistency expects: (ves'.venv .safe).WF  is VEnv.WF from the model
-  --
-  -- These are different types in different layers:
-  --   VEnvs.WF (Lean4Lean.Verify.TypeChecker): relates VEnvs to kernel Environment
-  --   VEnv.WF (Lean4Lean.Theory.Typing.Env): relates VEnv to itself via VDecl list
-  --
-  -- There is no proven lemma connecting ves'.WF env to (ves'.venv .safe).WF.
-  -- The buildVEnvAccum function in Lean4Lean.Soundness constructs a VEnv that
-  -- satisfies both, but the connection hasn't been formalized.
-  --
-  -- This is the "model-model" gap: the verification layer and the semantic model
-  -- use different well-formedness predicates.
-  --
-  -- For now, we leave this as a sorry.
+  -- For now, we leave this as a sorry with the correct henv' available.
   sorry
 
 end LeanKernelSoundnessTools
