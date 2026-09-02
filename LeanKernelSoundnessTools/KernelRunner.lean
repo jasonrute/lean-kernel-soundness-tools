@@ -12,12 +12,15 @@ into the fragment-compatible form.
 
 import LeanKernelSoundnessTools.Kernel
 import Lean4Lean.Replay
+import Lean4Lean.Soundness
 import Lean.Data.Json.Parser
 import Std.Data.HashMap
 import Std.Internal.Parsec.String
 
 open LeanKernelSoundnessTools
+open Lean4Lean
 open Lean
+open Kernel
 open Std.Internal.Parsec
 open Std.Internal.Parsec.String
 
@@ -394,7 +397,8 @@ def parseFile : M Unit := do
 end Parse
 
 def parseStream (stream : IO.FS.Stream) : IO (List ConstantInfo) := do
-  let (_, state) ← Parse.M.run Parse.parseFile stream
+  let initState : Parse.State := { stream := stream }
+  let (_, state) ← Parse.parseFile initState
   let { constMap, constOrder, .. } := state
   return constOrder.toList.map fun name => constMap[name]!
 
@@ -427,14 +431,14 @@ Replay an export file's declarations into a kernel Environment.
 Uses `Lean4Lean.Replay.replay` to replay declarations into an initial
 environment and returns the final environment.
 -/
-def replayExport (p : ParsedExport) : IO (Option Environment) := do
+def replayExport (p : ParsedExport) : IO (Option Kernel.Environment) := do
   let mut newConstants : Std.HashMap Name ConstantInfo := {}
   for decl in p.declarations do
     newConstants := newConstants.insert decl.name decl
   let ctx : Lean4Lean.Replay.Context := {
     newConstants := newConstants
   }
-  let (_, env) ← Lean4Lean.Replay.replay ctx (Environment.empty .anonymous)
+  let (_, env) ← Lean4Lean.Replay.replay ctx (Environment.empty (Name.mkSimple "Init"))
   return some env
 
 /--
@@ -447,7 +451,7 @@ This is the main entry point for the end-to-end pipeline:
 
 Returns the final environment and a list of check results.
 -/
-def runKernel (k : Kernel) (exportFile : String) : IO (Option (Environment × List (Name × KernelResult))) := do
+def runKernel (k : Kernel) (exportFile : String) : IO (Option (Kernel.Environment × List (Name × KernelResult))) := do
   let parsed ← preprocess exportFile
   let env ← replayExport parsed
   match env with
