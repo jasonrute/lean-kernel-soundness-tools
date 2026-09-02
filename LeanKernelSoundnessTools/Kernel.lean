@@ -79,6 +79,31 @@ structure AcceptKernel where
   /-- Check if `p` is a valid proof of `T` in `env`. Always returns `.valid`. -/
   check : Environment → Expr → Expr → KernelResult
 
+/--
+A kernel backed by the actual Lean4Lean type checker.
+
+This is the real proof checker: given an environment and a proof term,
+it uses `TypeChecker.checkType` and `TypeChecker.isDefEq` to verify
+that the proof is well-typed.
+-/
+def Lean4LeanKernel.check (env : Environment) (p T : Expr) : KernelResult :=
+  match TypeChecker.M.run env (safety := .safe) (lctx := {}) (lparams := []) (fuel := {})
+      (TypeChecker.checkType p) with
+  | .error _ =>
+    -- Type inference failed — p is not well-typed
+    KernelResult.invalid
+  | .ok inferredType =>
+    -- p has type `inferredType`; check if it matches T
+    match TypeChecker.M.run env (safety := .safe) (lctx := {}) (lparams := []) (fuel := {})
+      (TypeChecker.isDefEq inferredType T) with
+    | .error _ => KernelResult.invalid
+    | .ok true => KernelResult.valid
+    | .ok false => KernelResult.invalid
+
+/-- A `Kernel` backed by the Lean4Lean type checker. -/
+def Lean4LeanKernel : Kernel where
+  check := Lean4LeanKernel.check
+
 instance : Kernel where
   check := fun _ _ _ => KernelResult.invalid
 

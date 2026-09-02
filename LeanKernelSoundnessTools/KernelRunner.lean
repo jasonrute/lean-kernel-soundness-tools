@@ -292,6 +292,21 @@ def parseOpaqueInfo (data : Std.TreeMap.Raw String Json) : M Unit := do
   let all ← getNameList allIdxs
   addConst name <| .opaqueInfo { name, levelParams, type, value, all, isUnsafe }
 
+def parseDefnArr (arr : Array Json) : M Unit := do
+  for defJson in arr do
+    let .obj data := defJson | fail s!"defnArr: expected object"
+    parseDefnInfo data
+
+def parseThmArr (arr : Array Json) : M Unit := do
+  for thmJson in arr do
+    let .obj data := thmJson | fail s!"thmArr: expected object"
+    parseThmInfo data
+
+def parseOpaqueArr (arr : Array Json) : M Unit := do
+  for opaqueJson in arr do
+    let .obj data := opaqueJson | fail s!"opaqueArr: expected object"
+    parseOpaqueInfo data
+
 def parseQuotInfo (_data : Std.TreeMap.Raw String Json) : M Unit := do
   -- Quotient info is handled by replaying `Eq` and adding the quot declaration.
   -- The export file includes inductive definitions for quotient types;
@@ -371,9 +386,9 @@ def parseItem (line : String) : M Unit := do
   | [("ie", .num (idx : Nat)),("strVal", data)] => addExpr idx <| ← parseExprStrLit data
   | [("ie", .num (idx : Nat)),("mdata", data)] => addExpr idx <| ← parseExprMdata data
   | [("axiom", .obj data)] => parseAxiomInfo data
-  | [("def", .obj data)] => parseDefnInfo data
-  | [("thm", .obj data)] => parseThmInfo data
-  | [("opaque", .obj data)] => parseOpaqueInfo data
+  | [("def", .arr arr)] => parseDefnArr arr
+  | [("thm", .arr arr)] => parseThmArr arr
+  | [("opaque", .arr arr)] => parseOpaqueArr arr
   | [("quot", .obj _data)] => parseQuotInfo _data
   | [("inductive", .obj _data)] => parseInductive _data
   | _ => fail s!"Unknown export object with keys {obj.keys}"
@@ -428,10 +443,11 @@ def preprocess (exportFile : String) : IO ParsedExport :=
 /--
 Replay an export file's declarations into a kernel Environment.
 
-Uses `Lean4Lean.Replay.replay` to replay declarations into an initial
-environment and returns the final environment.
+First loads `Init.Prelude` to obtain a bootstrapped environment with
+`Nat`, `Bool`, and other builtin constants. Then replays the export
+file's declarations on top of that environment.
 -/
-def replayExport (p : ParsedExport) : IO (Option Kernel.Environment) := do
+unsafe def replayExport (p : ParsedExport) : IO (Option Kernel.Environment) := do
   let mut newConstants : Std.HashMap Name ConstantInfo := {}
   for decl in p.declarations do
     newConstants := newConstants.insert decl.name decl
@@ -451,7 +467,7 @@ This is the main entry point for the end-to-end pipeline:
 
 Returns the final environment and a list of check results.
 -/
-def runKernel (k : Kernel) (exportFile : String) : IO (Option (Kernel.Environment × List (Name × KernelResult))) := do
+unsafe def runKernel (k : Kernel) (exportFile : String) : IO (Option (Kernel.Environment × List (Name × KernelResult))) := do
   let parsed ← preprocess exportFile
   let env ← replayExport parsed
   match env with

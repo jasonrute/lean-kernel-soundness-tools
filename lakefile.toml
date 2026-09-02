@@ -1,5 +1,10 @@
 name = "lean-kernel-soundness-tools"
-defaultTargets = ["LeanKernelSoundnessTools"]
+defaultTargets = ["LeanKernelSoundnessTools", "lean-kernel-check"]
+
+[[lean_exe]]
+name = "lean-kernel-check"
+root = "Main"
+rpath = ["/Users/jasonrute/.elan/toolchains/leanprover--lean4---v4.33.0-rc2/lib/lean"]
 
 [[require]]
 name = "lean4lean"
