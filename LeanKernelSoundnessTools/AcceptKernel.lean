@@ -1,7 +1,8 @@
 /-
 # Accept Kernel
 
-A kernel that accepts every input. Used to test the kernel abstraction.
+`AcceptKernel` always returns `.valid`. It is not sound because it accepts
+proofs that the verification model cannot translate.
 -/
 
 import LeanKernelSoundnessTools.Kernel
@@ -11,20 +12,10 @@ open LeanKernelSoundnessTools
 namespace LeanKernelSoundnessTools
 
 /--
-A kernel that always accepts every proof.
-
-This kernel is trivially unsound: it will accept a proof of `False` if
-one exists in the environment, but the model guarantees no such proof
-exists.
--/
-instance : Kernel, AcceptKernel := {}
-
-/--
-Prove that AcceptKernel is NOT sound.
-
-With the bidirectional Sound class:
-- Forward: `check = .valid → model accepts` — fails because model can't translate `.mvar`
-- Backward: `model accepts → check ≠ .invalid` — holds trivially
+`AcceptKernel` always returns `.valid`. It is NOT sound because there exist
+expressions (e.g., `.mvar`) that cannot be translated by `Lean4Lean.TrExprS`,
+but `AcceptKernel` accepts everything. Thus soundness would require translations
+that don't exist.
 -/
 theorem acceptKernel_not_sound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) :

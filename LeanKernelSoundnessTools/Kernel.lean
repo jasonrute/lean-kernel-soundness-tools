@@ -68,24 +68,28 @@ class Kernel where
 /--
 A kernel that always rejects every input.
 -/
-class ErrorKernel extends Kernel where
-  check := fun _ _ _ => .invalid
+structure ErrorKernel where
+  /-- Check if `p` is a valid proof of `T` in `env`. Always returns `.invalid`. -/
+  check : Environment → Expr → Expr → KernelResult
 
 /--
 A kernel that always accepts every input.
 -/
-class AcceptKernel extends Kernel where
-  check := fun _ _ _ => .valid
+structure AcceptKernel where
+  /-- Check if `p` is a valid proof of `T` in `env`. Always returns `.valid`. -/
+  check : Environment → Expr → Expr → KernelResult
 
--- Provide Kernel instances so ErrorKernel/AcceptKernel can be used as Kernel
-instance : ErrorKernel where
-instance : AcceptKernel where
+instance : Kernel where
+  check := fun _ _ _ => KernelResult.invalid
+
+instance : Kernel where
+  check := fun _ _ _ => KernelResult.valid
 
 instance instKernelInvalid : Kernel where
-  check := fun _ _ _ => .invalid
+  check := fun _ _ _ => KernelResult.invalid
 
 instance instKernelValid : Kernel where
-  check := fun _ _ _ => .valid
+  check := fun _ _ _ => KernelResult.valid
 
 /-! ## Soundness property -/
 
@@ -131,7 +135,7 @@ is not *complete* (too strict).
 theorem errorKernel_unsound (buildVEnv : Environment → VEnv) (env : Environment)
     (ves : VEnvs) (wf : ves.WF env) (p T : Expr) (p' T' : VExpr)
     (hModel : (ves.venv .safe).HasType 0 [] p' T') :
-    instKernelInvalid.check env p T = .invalid := rfl
+    instKernelInvalid.check env p T = KernelResult.invalid := rfl
 
 /--
 An unsound kernel: `AcceptKernel` accepts every input, so it is not sound.
