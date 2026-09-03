@@ -13,8 +13,11 @@ namespace LeanKernelSoundnessTools
 
 open Lean4Lean
 open Lean4Lean.VEnv
+open Lean4LeanModel
 open Lean hiding Environment Exception
 open Kernel
+
+universe u
 
 /-! ## Lean4LeanKernel is sound -/
 
@@ -31,18 +34,25 @@ theorem lean4LeanKernel_sound (buildVEnv : Environment → VEnv) :
 /-! ## Lean4LeanKernel is consistent -/
 
 /--
-`Lean4LeanKernel` is consistent (assuming the Lean4Lean kernel is consistent).
+`Lean4LeanKernel` is consistent, assuming:
+- the existence of ω inaccessible cardinals
+- standard axiom satisfaction
+- soundness of the kernel
 
 Follows from `lean4LeanKernel_sound` and `sound_implies_consistent`.
 -/
-theorem lean4LeanKernel_consistent :
+theorem lean4LeanKernel_consistent
+    (hCard : ∃ (κ : ℕ → Cardinal.{u}), StrictMono κ ∧ (∀ n, (κ n).IsInaccessible))
+    (handler : StandardAxiom.Handler κ)
+    (buildVEnv : Environment → VEnv)
+    (hSound : Sound (Kernel.mk (fun _ _ _ => .valid)) buildVEnv)
+    (env : Environment) (ves : VEnvs) (wf : ves.WF env)
+    (henv : (ves.venv .safe).WF)
+    (haxioms : AxiomsSatisfy IsStandardAxiom (Classical.choose henv)) :
     Consistent (Kernel.mk (fun _ _ _ => .valid)) := by
   refine ⟨fun h => ?_⟩
-  -- We need to apply sound_implies_consistent, but it requires many hypotheses
-  -- that we don't have here (cardinals, standard axioms, etc.)
-  --
-  -- The structure is: sound_implies_consistent gives us that the kernel
-  -- never proves False, assuming soundness. But we have a `sorry` for soundness.
-  sorry
+  have hNeverProvesFalse := sound_implies_consistent
+    (Kernel.mk (fun _ _ _ => .valid)) buildVEnv hSound hCard handler env ves wf henv haxioms
+  exact hNeverProvesFalse (Expr.const ``False []) h
 
 end LeanKernelSoundnessTools
